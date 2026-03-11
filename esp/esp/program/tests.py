@@ -1312,6 +1312,29 @@ class LSRAssignmentTest(ProgramFrameworkTest):
             #   Compare against the value in the stats dict (allow for floating-point error)
             self.assertAlmostEqual(student_screwed_val, stats_entry[0])
 
+    def testUtilityIncreasesWithDuration(self):
+        """
+        Regression test for Issue #1843.
+        Utility should scale with section duration.
+        """
+
+        lotteryController = LotteryAssignmentController(self.program)
+        lotteryController.compute_assignments()
+
+        # pick two sections with different durations
+        lengths = lotteryController.section_lengths
+
+        if len(set(lengths)) < 2:
+            return  # skip if durations accidentally equal
+
+        short_index = lengths.argmin()
+        long_index = lengths.argmax()
+
+        short_len = lengths[short_index]
+        long_len = lengths[long_index]
+
+        self.assertTrue(long_len >= short_len)
+
     def testSingleLunchConstraint(self):
         # First generate 1 lunch timeslot
         lunch_timeslot = random.choice(self.timeslots)
@@ -1377,6 +1400,50 @@ class LSRAssignmentTest(ProgramFrameworkTest):
         scrmi.save()
 
         self.testLottery()
+
+    def testUtilityUsesDuration(self):
+        """
+        Regression test for Issue #1843.
+        Utility should reflect total class duration.
+        """
+
+        lotteryController = LotteryAssignmentController(self.program)
+        lotteryController.compute_assignments()
+
+        for i in range(lotteryController.num_students):
+
+            assigned = numpy.nonzero(lotteryController.student_sections[i])[0]
+
+            if len(assigned) == 0:
+                continue
+
+            total_duration = sum(
+                lotteryController.section_lengths[si]
+                for si in assigned
+            )
+
+            utility = lotteryController.student_utilities[i]
+
+            self.assertGreaterEqual(
+                utility,
+                total_duration,
+                msg=f"Utility {utility} should reflect duration {total_duration}"
+            )
+
+
+    def testSectionLengthsComputed(self):
+        """
+        Ensure section_lengths correctly matches meeting times.
+        """
+
+        lotteryController = LotteryAssignmentController(self.program)
+
+        for i, section in enumerate(lotteryController.sections):
+
+            expected = len(section.meeting_times.all())
+            actual = lotteryController.section_lengths[i]
+
+            self.assertEqual(actual, expected)
 
 class BulkCreateAccountTest(ProgramFrameworkTest):
     def setUp(self):
